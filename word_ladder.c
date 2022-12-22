@@ -186,7 +186,7 @@ static hash_table_t *hash_table_create(void)
 
 static void hash_table_grow(hash_table_t *hash_table)
 {
-  hash_table_node_s new_size = hash_table->hash_table_size * 2;
+  hash_table_node_t new_size = hash_table->hash_table_size * 2;
   hash_table_node_t**novat= (hash_table_node_t**) calloc(hash_table->hash_table_size, sizeof(hash_table_node_t*));
   if(novat == NULL)
   {
@@ -209,7 +209,6 @@ static void hash_table_grow(hash_table_t *hash_table)
       node = next;
     }
   }
-  free(hash_table->heads);
   hash_table->heads = novat;  
   hash_table->hash_table_size = new_size;
   
@@ -231,9 +230,23 @@ static hash_table_node_t *find_word(hash_table_t *hash_table,const char *word,in
   unsigned int i;
 
   i = crc32(word) % hash_table->hash_table_size;
-  //
-  // complete this
-  //
+  node = hash_table->heads[i];
+  while(node != NULL)
+  {
+    if(strcmp(node->word,word) == 0)
+      return node;
+    node = node->next;
+  }
+  if(insert_if_not_found)
+  {
+    node = allocate_hash_table_node();
+    node->word = strdup(word);
+    node->next = hash_table->heads[i];
+    hash_table->heads[i] = node;
+    hash_table->number_of_entries++;
+    if(hash_table->number_of_entries > hash_table->hash_table_size)
+      hash_table_grow(hash_table);
+  }
   return node;
 }
 
@@ -246,9 +259,16 @@ static hash_table_node_t *find_representative(hash_table_node_t *node)
 {
   hash_table_node_t *representative,*next_node;
 
-  //
-  // complete this
-  //
+  representative = node;
+  while(representative->representative != NULL)
+    representative = representative->representative;
+  while(node->representative != NULL)
+  {
+    next_node = node->representative;
+    node->representative = representative;
+    node = next_node;
+  }
+
   return representative;
 }
 
@@ -258,9 +278,23 @@ static void add_edge(hash_table_t *hash_table,hash_table_node_t *from,const char
   adjacency_node_t *link;
 
   to = find_word(hash_table,word,0);
-  //
-  // complete this
-  //
+  if(to == NULL)
+    return;
+  from_representative = find_representative(from);
+  to_representative = find_representative(to);
+  if(from_representative == to_representative)
+    return;
+  link = (adjacency_node_t *)malloc(sizeof(adjacency_node_t));
+  if(link == NULL)
+  {
+    fprintf(stderr,"add_edge: out of memory\n");
+    exit(1);
+  }
+  link->node = to_representative;
+  link->next = from_representative->adjacency_list;
+  from_representative->adjacency_list = link;
+  to_representative->representative = from_representative;
+  hash_table->number_of_edges++;
 }
 
 
