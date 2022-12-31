@@ -171,7 +171,7 @@ static hash_table_t *hash_table_create(void)
   hash_table->hash_table_size = 100;
   hash_table->number_of_entries = 0;
   hash_table->number_of_edges =0;
-  hash_table->heads= (hash_table_node_t**) calloc(hash_table->hash_table_size, sizeof(hash_table_node_t*));
+  hash_table->heads= (hash_table_node_t**) malloc(hash_table->hash_table_size, sizeof(hash_table_node_t*));
   if(hash_table->heads == NULL)
   {
     fprintf(stderr,"create_hash_table: out of memory\n");
@@ -218,9 +218,24 @@ static void hash_table_grow(hash_table_t *hash_table)
 
 static void hash_table_free(hash_table_t *hash_table)
 {
-  //
-  // complete this
-  //
+  for(int i = 0; i < hash_table->hash_table_size; i++)
+  {
+    hash_table_node_t* node = hash_table->heads[i];
+    while(node != NULL)
+    {
+      adjacency_node_t* adj = node->adjacency_list;
+      while(adj != NULL)
+      {
+        adjacency_node_t* next = adj->next;
+        free_adjacency_node(adj);
+        adj = next;
+      }
+      hash_table_node_t* next = node->next;
+      free_hash_table_node(node);
+      node = next;
+    }
+  }
+  free(hash_table->heads);
   free(hash_table);
 }
 
@@ -237,17 +252,24 @@ static hash_table_node_t *find_word(hash_table_t *hash_table,const char *word,in
       return node;
     node = node->next;
   }
-  if(insert_if_not_found)
+  if(insert_if_not_found && strlen(word) < _max_word_size_)
   {
     node = allocate_hash_table_node();
-    node->word = strdup(word);
+    strncpy(node->word,word,_max_word_size_);
+    node->representative = node;
     node->next = hash_table->heads[i];
+    node->previous = NULL;
+    node->number_of_edges = 0;
+    node->number_of_vertices = 1;
+    node-> visited = 0;
+    node->head = NULL;
     hash_table->heads[i] = node;
     hash_table->number_of_entries++;
     if(hash_table->number_of_entries > hash_table->hash_table_size)
       hash_table_grow(hash_table);
+    return node;
   }
-  return node;
+  return NULL;
 }
 
 
@@ -277,24 +299,21 @@ static void add_edge(hash_table_t *hash_table,hash_table_node_t *from,const char
   hash_table_node_t *to,*from_representative,*to_representative;
   adjacency_node_t *link;
 
-  to = find_word(hash_table,word,0);
+  to = find_word(hash_table,word,1);
   if(to == NULL)
     return;
   from_representative = find_representative(from);
   to_representative = find_representative(to);
   if(from_representative == to_representative)
     return;
-  link = (adjacency_node_t *)malloc(sizeof(adjacency_node_t));
-  if(link == NULL)
-  {
-    fprintf(stderr,"add_edge: out of memory\n");
-    exit(1);
-  }
-  link->node = to_representative;
+  link = allocate_adjacency_node();
   link->next = from_representative->adjacency_list;
+  link->node = to_representative;
   from_representative->adjacency_list = link;
-  to_representative->representative = from_representative;
-  hash_table->number_of_edges++;
+  from_representative->number_of_edges++;
+  to_representative->number_of_vertices++;
+  from_representative->representative = to_representative;
+
 }
 
 
@@ -391,10 +410,27 @@ static void similar_words(hash_table_t *hash_table,hash_table_node_t *from)
 
 static int breadh_first_search(int maximum_number_of_vertices,hash_table_node_t **list_of_vertices,hash_table_node_t *origin,hash_table_node_t *goal)
 {
-  //
-  // complete this
-  //
-  return -1;
+  int r=0,w=1;
+  list_of_vertices[0] = origin;
+  origin->previous = NULL;
+  origin->visited = 1;
+  int stop = 0;
+  while(r < w && !stop)
+  {
+    adjacency_node_t *node = list_of_vertices[r++]->head;
+    while(node != NULL && !stop)
+    {
+      if(node->node->visited == 0)
+      {
+        node->node->visited = 1;
+        node->node->previous = list_of_vertices[r-1];
+        list_of_vertices[w++] = node->node;
+        if(node->node == goal)
+          stop = 1;
+      }
+      node = node->next;
+    }
+  }
 }
 
 
@@ -404,9 +440,7 @@ static int breadh_first_search(int maximum_number_of_vertices,hash_table_node_t 
 
 static void list_connected_component(hash_table_t *hash_table,const char *word)
 {
-  //
-  // complete this
-  //
+
 }
 
 
