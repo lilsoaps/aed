@@ -205,14 +205,13 @@ static void hash_table_grow(hash_table_t *hash_table)
     while(node != NULL)
     {
       hash_table_node_t* next = node->next;
-      int index = crc32(node->word) % hash_table->hash_table_size;
+      unsigned int index = crc32(node->word) % hash_table->hash_table_size;
       node->next = hash_table->heads[index];
       hash_table->heads[index] = node;
       node = next;
     }
   }
   free(old_heads);
-  
 
 
 }
@@ -295,23 +294,62 @@ static void add_edge(hash_table_t *hash_table,hash_table_node_t *from,const char
   to = find_word(hash_table,word,1);
   if(to != NULL)
   {
-    from = find_representative(from);
-    to = find_representative(to);
-    if(from != to)
+      hash_table_node_t *to,*from_representative,*to_representative;
+  adjacency_node_t *linkfrom, *linkto;
+
+  from_representative = find_representative(from);
+  to = find_word(hash_table,word,0);
+  
+  if(to == NULL || to == from) 
+    return;
+  
+  
+  to_representative = find_representative(to);
+  if (from_representative == to_representative){
+    from_representative->number_of_edges++;
+  } else {
+    if (from_representative->number_of_vertices < to_representative->number_of_vertices)
     {
-      if(from->number_of_vertices < to->number_of_vertices)
-      {
-        from->representative = to;
-        to->number_of_vertices += from->number_of_vertices;
-      }
-      else
-      {
-        to->representative = from;
-        from->number_of_vertices += to->number_of_vertices;
-      }
-      hash_table->number_of_edges++;
+      from_representative->representative = to_representative;
+      to_representative->number_of_vertices += from_representative->number_of_vertices;
+      to_representative->number_of_edges += (from_representative->number_of_edges)+1;
+      from_representative->number_of_edges = 0;
+      from_representative->number_of_vertices = 0;
+    }
+    else
+    {
+      to_representative->representative = from_representative;
+      from_representative->number_of_vertices += to_representative->number_of_vertices;
+      from_representative->number_of_edges += (to_representative->number_of_edges)+1;
+      to_representative->number_of_edges = 0;
+      to_representative->number_of_vertices = 0;
     }
   }
+  
+
+  linkfrom = allocate_adjacency_node();
+  linkto = allocate_adjacency_node();
+
+  if(linkfrom == NULL || linkto == NULL)
+  {
+    fprintf(stderr,"add_edge: out of memory\n");
+    exit(1);
+  }
+  
+  linkfrom->vertex = to;
+  linkfrom->next = from->head;
+  from->head = linkfrom;
+
+  linkto->vertex = from;
+  linkto->next = to->head;
+  to->head = linkto;
+  
+  hash_table->number_of_edges++;
+  return;
+}
+  
+
+  
 
 
 }
@@ -453,6 +491,29 @@ static int breadh_first_search(int maximum_number_of_vertices,hash_table_node_t 
 
 static void list_connected_component(hash_table_t *hash_table,const char *word)
 {
+  hash_table_node_t *node, *rep;
+  int i, n, maximum_number_of_vertices;
+  hash_table_node_t **list_of_vertices;
+
+  node = find_word(hash_table,word,0);
+  if(node == NULL)
+  {
+    fprintf(stderr,"list_connected_component: word '%s' not found\n",word);
+    return;
+  }
+  rep = find_representative(node);
+  maximum_number_of_vertices = hash_table->number_of_edges;
+  list_of_vertices = (hash_table_node_t **)malloc(maximum_number_of_vertices * sizeof(hash_table_node_t *));
+  if(list_of_vertices == NULL)
+  {
+    fprintf(stderr,"list_connected_component: out of memory\n");
+    exit(1);
+  }
+  n = breadh_first_search(maximum_number_of_vertices,list_of_vertices,rep,NULL);
+  for(i = 0;i < n;i++)
+    printf("%s\n",list_of_vertices[i]->word);
+  free(list_of_vertices);
+
 
 }
 
@@ -481,10 +542,45 @@ static int connected_component_diameter(hash_table_node_t *node)
 
 static void path_finder(hash_table_t *hash_table,const char *from_word,const char *to_word)
 {
-  //
-  // complete this
-  //
+hash_table_node_t *fromNode, *fromRep, *toNode, *toRep;
+  fromNode = find_word(hash_table, from_word, 0);
+  toNode = find_word(hash_table, to_word, 0);
+  
+  if(fromNode == NULL || toNode == NULL){
+    printf("One of the words is not in the dictionary\n");
+    return;
+  }
+
+  fromRep = find_representative(fromNode);
+  toRep = find_representative(toNode);
+
+  if(fromRep != toRep){
+    printf("The words are not in the same connected component, so there's no path between them.\n");
+    return;
+  }
+
+  hash_table_node_t **list_of_vertices = malloc(sizeof(hash_table_node_t *) * fromRep->number_of_vertices);
+  
+  if (list_of_vertices == NULL)
+  {
+    fprintf(stderr, "path_finder: malloc failed\n");
+    exit(1);
+  }
+
+  int goalIndex = breadh_first_search(fromRep->number_of_vertices, list_of_vertices, toNode, fromNode);
+
+  hash_table_node_t *p = list_of_vertices[goalIndex-1];
+  int count = 0;
+  while (p != NULL)
+  {
+    printf("%d: %s \n",count, p->word);
+    count++;
+    p = p->previous;
+  }
+  
+  free(list_of_vertices);
 }
+
 
 
 //
@@ -515,7 +611,7 @@ int main(int argc,char **argv)
   // initialize hash table
   hash_table = hash_table_create();
   // read words
-  fp = fopen((argc < 2) ? "wordlist-big-latest.txt" : argv[1],"rb");
+  fp = fopen((argc < 2) ? "wordtest.txt" : argv[1],"rb");
   if(fp == NULL)
   {
     fprintf(stderr,"main: unable to open the words file\n");
