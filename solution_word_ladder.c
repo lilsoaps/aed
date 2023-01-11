@@ -62,7 +62,7 @@ typedef struct hash_table_s      hash_table_t;
 
 struct adjacency_node_s
 {
-  adjacency_node_t *next;            // link to the next adjacency list node
+  adjacency_node_t *next;            // link to th enext adjacency list node
   hash_table_node_t *vertex;         // the other vertex
 };
 
@@ -89,11 +89,6 @@ struct hash_table_s
   hash_table_node_t **heads;         // the heads of the linked lists
 };
 
-struct queue_s
-{
-  hash_table_node_t *node;
-  struct queue_s *next;
-};
 
 //
 // allocation and deallocation of linked list nodes (done)
@@ -134,6 +129,7 @@ static void free_hash_table_node(hash_table_node_t *node)
 {
   free(node);
 }
+
 
 
 //
