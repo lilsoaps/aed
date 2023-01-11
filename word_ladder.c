@@ -46,7 +46,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <unistd.h>
 
 #define _max_word_size_  32
 
@@ -654,8 +654,12 @@ static void path_finder(hash_table_t *hash_table,const char *from_word,const cha
 //
 
 
-static void graph_info(hash_table_t *hash_table)
+static void graph_info(hash_table_t *hash_table, char *FileName)
 {
+  
+  char JsonName[0xFF] = "\0";
+  strcat(JsonName, FileName);
+  strcat(JsonName, "_graph_info.json");
   //create node array to keep track of representative nodes
   hash_table_node_t **representatives = malloc(sizeof(hash_table_node_t *) * hash_table->number_of_entries);
   int numRepresentatives = 0; // d
@@ -722,8 +726,8 @@ static void graph_info(hash_table_t *hash_table)
   }
   //create smaller array to hold the representative nodes
   hash_table_node_t **representatives2 = malloc(sizeof(hash_table_node_t *) * numRepresentatives);
-  int ComponentSizeArray2[numRepresentatives];
-  int diameterArray2[numRepresentatives];
+  int *ComponentSizeArray2 = malloc(sizeof(int) * numRepresentatives);
+  int *diameterArray2 = malloc(sizeof(int) * numRepresentatives);
   for (int i = 0; i < numRepresentatives; i++)
   {
     representatives2[i] = representatives[i];
@@ -740,7 +744,7 @@ static void graph_info(hash_table_t *hash_table)
 
   // create a file pointer to write to
 
-  FILE *fp = fopen("graph_info.json", "w");
+  FILE *fp = fopen(JsonName, "w");
 
   // write the graph information to the file using json format
   fprintf(fp, "{\n");
@@ -775,14 +779,19 @@ static void graph_info(hash_table_t *hash_table)
   fprintf(fp, "]\n");
   fprintf(fp, "}\n");
   free(representatives2);
+  free(ComponentSizeArray2);
+  free(diameterArray2);
   fclose(fp);
   return;
 }
 
-static void hash_table_info(hash_table_t *hash_table)
+static void hash_table_info(hash_table_t *hash_table, char *FileName)
 {
   // create a file pointer to write to
-  FILE *fp = fopen("hash_table_info.json", "w");
+  char JsonName[0xFFF] = "\0";
+  strcat(JsonName, FileName);
+  strcat(JsonName, "_hash_table_info.json");
+  FILE *fp = fopen(JsonName, "w");
 
   // write the hashtable size to the file using json format
   fprintf(fp, "{\n");
@@ -791,12 +800,13 @@ static void hash_table_info(hash_table_t *hash_table)
   fprintf(fp, "\t\"load_factor\": %f,\n", hash_table->number_of_entries/(float)hash_table->hash_table_size);
 
   // find the shortest chain, longest chain, and average chain
-  int shortest_chain = 1000000;
+  int shortest_chain = hash_table->number_of_entries+1;
   int longest_chain = 0;
   int average_chain = 0;
-  int count = 0;
+  long int count = 0;
   int chainArray[hash_table->hash_table_size];
-  for (uint i = 0; i < hash_table->hash_table_size; i++)
+  
+  for (long int i = 0; i < hash_table->hash_table_size; i++)
   {
     if (hash_table->heads[i] != NULL)
     {
@@ -808,14 +818,17 @@ static void hash_table_info(hash_table_t *hash_table)
         p = p->next;
       }
       chainArray[i] = chain_length;
+      
       if (chain_length < shortest_chain)
       {
         shortest_chain = chain_length;
       }
+      
       if (chain_length > longest_chain)
       {
         longest_chain = chain_length;
       }
+      
       average_chain += chain_length;
       count++;
     } else {
@@ -827,10 +840,19 @@ static void hash_table_info(hash_table_t *hash_table)
   fprintf(fp, "\t\"longest_chain\": %d,\n", longest_chain);
   fprintf(fp, "\t\"average_chain\": %f,\n", avg_chain);
   fprintf(fp, "\t\"chains\": [");
+
+  
   // create new array to store the chain lengths with non-zero chains
-  int chainArray2[count];
+  int *chainArray2 = malloc(sizeof(int) * count);
+
+  if (chainArray2 == NULL)
+  {
+    printf("memalloc failed\n");
+    exit(1);
+  }
+  
   int j = 0;
-  for (uint i = 0; i < hash_table->hash_table_size; i++)
+  for (long int i = 0; i < hash_table->hash_table_size; i++)
   {
     if (chainArray[i] != 0)
     {
@@ -852,6 +874,7 @@ static void hash_table_info(hash_table_t *hash_table)
   //close json format
   fprintf(fp, "}\n");
   fclose(fp);
+  free(chainArray2);
   return;
 }
 
@@ -879,27 +902,50 @@ static void print_list(hash_table_t *hash_table){
 int main(int argc,char **argv)
 {
   char word[100],from[100],to[100];
+  char filename[0xFFF];
+  int MAXSIZE = 0xFFF;
+  char proclnk[0xFFF];
+  int fno;
+  ssize_t r;
   hash_table_t *hash_table;
   hash_table_node_t *node;
+  
   unsigned int i;
   int command;
+  
   FILE *fp;
   printf("Word Ladder Solver\n");
   // initialize hash table
   hash_table = hash_table_create();
   // read words
-  fp = fopen((argc < 2) ? "wordlist-four-letters.txt" : argv[1],"rb");
+  fp = fopen((argc < 2) ? "wordlist-big-latest.txt" : argv[1],"rb");
   if(fp == NULL)
   {
     fprintf(stderr,"main: unable to open the words file\n");
     exit(1);
   }
-  
-    while(fscanf(fp,"%99s",word) == 1)
-      (void)find_word(hash_table,word,1);
-    fclose(fp);
-    // find all similar words
 
+  // File Pointer and string manipulation
+  fno = fileno(fp);
+  sprintf(proclnk, "/proc/self/fd/%d", fno);
+  r = readlink(proclnk, filename, MAXSIZE);
+  filename[r] = '\0';
+
+  char *token = strtok(filename, "/");
+  char *tokenlast;
+  while( token != NULL ) {
+      tokenlast = token;
+      token = strtok(NULL, "/");
+  }
+  char *ActualFilename = strtok(tokenlast, ".");
+  // end of string manipulation
+
+  while(fscanf(fp,"%99s",word) == 1){
+    (void)find_word(hash_table,word,1);
+  }
+  fclose(fp);
+
+    // find all similar words
   for(i = 0u;i < hash_table->hash_table_size;i++)
   { 
     for(node = hash_table->heads[i];node != NULL;node = node->next)
@@ -907,8 +953,9 @@ int main(int argc,char **argv)
       similar_words(hash_table, node);
     }
   }
-  graph_info(hash_table);
-  hash_table_info(hash_table);
+  hash_table_info(hash_table, ActualFilename);
+  graph_info(hash_table, ActualFilename);
+
   // ask what to do
   for(;;)
   {
