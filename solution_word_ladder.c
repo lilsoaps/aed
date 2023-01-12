@@ -545,43 +545,34 @@ static int connected_component_diameter(hash_table_node_t *node)
 
 static void path_finder(hash_table_t *hash_table,const char *from_word,const char *to_word)
 {
-hash_table_node_t *fromNode, *fromRep, *toNode, *toRep;
-  fromNode = find_word(hash_table, from_word, 0);
-  toNode = find_word(hash_table, to_word, 0);
-  
-  if(fromNode == NULL || toNode == NULL){
-    printf("One of the words is not in the dictionary\n");
-    return;
-  }
+  hash_table_node_t *from_node,*to_node,*node;
+  int i, n, maximum_number_of_vertices;
+  hash_table_node_t **list_of_vertices;
 
-  fromRep = find_representative(fromNode);
-  toRep = find_representative(toNode);
-
-  if(fromRep != toRep){
-    printf("The words are not in the same connected component, so there's no path between them.\n");
-    return;
-  }
-
-  hash_table_node_t **list_of_vertices = malloc(sizeof(hash_table_node_t *) * fromRep->number_of_vertices);
-  
-  if (list_of_vertices == NULL)
+  from_node = find_word(hash_table,from_word,0);
+  if(from_node == NULL)
   {
-    fprintf(stderr, "path_finder: malloc failed\n");
+    fprintf(stderr,"path_finder: word '%s' not found\n",from_word);
+    return;
+  }
+  to_node = find_word(hash_table,to_word,0);
+  if(to_node == NULL)
+  {
+    fprintf(stderr,"path_finder: word '%s' not found\n",to_word);
+    return;
+  }
+  maximum_number_of_vertices = hash_table->number_of_edges;
+  list_of_vertices = (hash_table_node_t **)malloc(maximum_number_of_vertices * sizeof(hash_table_node_t *));
+  if(list_of_vertices == NULL)
+  {
+    fprintf(stderr,"path_finder: out of memory\n");
     exit(1);
   }
-
-  int goalIndex = breadh_first_search(fromRep->number_of_vertices, list_of_vertices, toNode, fromNode);
-
-  hash_table_node_t *p = list_of_vertices[goalIndex-1];
-  int count = 0;
-  while (p != NULL)
-  {
-    printf("%d: %s \n",count, p->word);
-    count++;
-    p = p->previous;
-  }
-  
+  n = breadh_first_search(maximum_number_of_vertices,list_of_vertices,from_node,to_node);
+  for(i = 0;i < n;i++)
+    printf("%s\n",list_of_vertices[i]->word);
   free(list_of_vertices);
+  
 }
 
 
