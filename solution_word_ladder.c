@@ -569,43 +569,40 @@ static int connected_component_diameter(hash_table_node_t *node)
 
 static void path_finder(hash_table_t *hash_table,const char *from_word,const char *to_word)
 {
-  hash_table_node_t *fromNode, *fromRep, *toNode, *toRep;
-  fromNode = find_word(hash_table, from_word, 0);
-  toNode = find_word(hash_table, to_word, 0);
-  
-  if(fromNode == NULL || toNode == NULL){
-    printf("One of the words is not in the dictionary\n");
-    return;
-  }
-
-  fromRep = find_representative(fromNode);
-  toRep = find_representative(toNode);
-
-  if(fromRep != toRep){
-    printf("The words are not in the same connected component, so there's no path between them.\n");
-    return;
-  }
-
-  hash_table_node_t **list_of_vertices = malloc(sizeof(hash_table_node_t *) * fromRep->number_of_vertices);
-  
-  if (list_of_vertices == NULL)
+  hash_table_node_t *from_node, *to_node, *to_rep, *from_rep;
+  from_node = find_word(hash_table,from_word,0);
+  to_node = find_word(hash_table,to_word,0);
+  if (from_node == NULL || to_node == NULL)
   {
-    fprintf(stderr, "path_finder: malloc failed\n");
+    printf("path_finder: word not found\n");
+    return;
+  }
+  to_rep = find_representative(to_node);
+  from_rep = find_representative(from_node);
+  if (from_rep != to_rep)
+  {
+    printf("path_finder: words not in the same connected component\n");
+    return;
+  }
+  hash_table_node_t **list_of_vertices = (hash_table_node_t **)malloc(to_rep->number_of_vertices * sizeof(hash_table_node_t *));
+  if(list_of_vertices == NULL)
+  {
+    fprintf(stderr,"path_finder: out of memory\n");
     exit(1);
   }
+  int goal = breadh_first_search(to_rep->number_of_vertices,list_of_vertices,from_node,to_node);
 
-  int index = breadh_first_search(fromRep->number_of_vertices, list_of_vertices, toNode, fromNode);
-
-  hash_table_node_t *p = list_of_vertices[index-1];
+  hash_table_node_t *p = list_of_vertices[goal-1];
   int count = 0;
   while (p != NULL)
   {
-    printf("%d: %s \n",count, p->word);
+    printf("%s\n",p->word);
     count++;
     p = p->previous;
   }
-  
+  printf("The shortest path from %s to %s is %d steps long\n",from_word,to_word,count);
   free(list_of_vertices);
+
 }
 
 
@@ -632,7 +629,7 @@ int main(int argc,char **argv)
   // initialize hash table
   hash_table = hash_table_create();
   // read words
-  fp = fopen((argc < 2) ? "wordtest.txt" : argv[1],"rb");
+  fp = fopen((argc < 2) ? "wordlist-four-letters.txt" : argv[1],"rb");
   if(fp == NULL)
   {
     fprintf(stderr,"main: unable to open the words file\n");
